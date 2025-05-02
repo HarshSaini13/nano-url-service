@@ -22,12 +22,20 @@ const connectMongoDB = async () => {
 const connectRedis = async () => {
   let client;
   try {
-    client = createClient({
-      socket: {
-        host: config.db.redis.host,
-        port: config.db.redis.port,
-      },
-    });
+    // Create Redis client with URL if available, otherwise use host/port
+    if (config.db.redis.url) {
+      client = createClient({
+        url: config.db.redis.url,
+      });
+    } else {
+      client = createClient({
+        socket: {
+          host: config.db.redis.host,
+          port: config.db.redis.port,
+        },
+        password: config.db.redis.password,
+      });
+    }
 
     // Try to connect first before setting up any listeners
     await client.connect();
@@ -46,7 +54,9 @@ const connectRedis = async () => {
       client.removeAllListeners();
       client = null;
     }
-    logger.warn('Redis connection failed, will continue without Redis');
+    logger.warn(
+      `Redis connection failed: ${error.message}, will continue without Redis`
+    );
     return null;
   }
 };

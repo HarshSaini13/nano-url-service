@@ -25,7 +25,12 @@ const connectRedis = async () => {
     // Create Redis client with URL if available, otherwise use host/port
     if (config.db.redis.url) {
       client = createClient({
-        url: config.db.redis.url,
+        username: 'default',
+        password: config.db.redis.password,
+        socket: {
+          host: config.db.redis.host,
+          port: config.db.redis.port,
+        },
       });
     } else {
       client = createClient({

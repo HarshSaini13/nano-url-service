@@ -22,6 +22,9 @@ const redirectRoutes = require('./routes/redirect.routes');
 // Create Express app
 const app = express();
 
+// Trust proxy settings (required for rate limiting behind proxy)
+app.set('trust proxy', 1);
+
 // Create logs directory if it doesn't exist
 const logsDir = path.join(__dirname, '../logs');
 if (!fs.existsSync(logsDir)) {

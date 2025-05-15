@@ -1,4 +1,4 @@
-const { nanoid } = require('nanoid');
+const base62 = require('../utils/base62');
 const Url = require('../models/url.model');
 const config = require('../config');
 const logger = require('../utils/logger');
@@ -15,20 +15,19 @@ const setRedisClient = (client) => {
 };
 
 /**
- * Generate a unique short ID
+ * Generate a unique short ID using Redis counter and base62 encoding
  * @returns {String} - Unique short ID
  */
 const generateShortId = async () => {
-  const shortId = nanoid(config.url.shortUrlLength);
-
-  // Check if the ID already exists to avoid collisions
-  const existingUrl = await Url.findOne({ shortId });
-  if (existingUrl) {
-    // Recursively try again if collision occurs (very rare with nanoid)
-    return generateShortId();
+  if (!redisClient) {
+    throw new Error('Redis client not initialized');
   }
 
-  return shortId;
+  // Increment the counter atomically in Redis
+  const counter = await redisClient.incr('url:counter');
+
+  // Convert the counter to base62
+  return base62.encode(counter);
 };
 
 /**

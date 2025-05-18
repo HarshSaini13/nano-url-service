@@ -50,11 +50,12 @@ if (config.server.env === 'development') {
 }
 
 // Apply rate limiting to all routes
-app.use(apiLimiter);
+// app.use(apiLimiter);
 
 // Routes
-app.use('/api/url', createUrlLimiter, urlRoutes); // URL API routes with stricter rate limiting
-app.use('/', redirectRoutes); // Redirect routes
+// app.use('/api/url', createUrlLimiter, urlRoutes);
+app.use('/api/url', urlRoutes);
+app.use('/', redirectRoutes);
 
 // Serve static files from the frontend build directory in production
 if (config.server.env === 'production') {

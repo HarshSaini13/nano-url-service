@@ -20,14 +20,13 @@ const setRedisClient = (client) => {
  */
 const generateShortId = async () => {
   if (!redisClient) {
+    // For critical logging, it's better to ensure logger is available
+    // Assuming logger is globally available or passed if not.
+    logger.error('Redis client not initialized in generateShortId');
     throw new Error('Redis client not initialized');
   }
-
-  // Increment the counter atomically in Redis
   const counter = await redisClient.incr('url:counter');
-
-  // Convert the counter to base62
-  return base62.encode(counter);
+  return base62.encode(counter, config.url.shortUrlLength);
 };
 
 /**
@@ -37,35 +36,112 @@ const generateShortId = async () => {
  * @returns {Object} - The created URL object
  */
 const createShortUrl = async (originalUrl, createdBy = 'anonymous') => {
+  const overallStartTime = process.hrtime();
+  let shortIdGenerationTime, dbCheckTime, dbSaveTime, cacheSetTime;
+
   try {
-    // Check if URL already exists to avoid duplicates
+    logger.info(
+      `[createShortUrl] Initiated for: ${originalUrl.substring(0, 50)}...`
+    );
+
+    // 1. Check if URL already exists (if this logic is active)
+    const dbCheckStartTime = process.hrtime();
     const existingUrl = await Url.findOne({ originalUrl });
+    const dbCheckEndTime = process.hrtime(dbCheckStartTime);
+    dbCheckTime = (dbCheckEndTime[0] * 1e9 + dbCheckEndTime[1]) / 1e6; // ms
+    logger.debug(
+      `[createShortUrl] DB originalUrl check took: ${dbCheckTime.toFixed(3)}ms`
+    );
+
     if (existingUrl) {
+      logger.info(
+        `[createShortUrl] URL already exists: ${
+          existingUrl.shortId
+        } for ${originalUrl.substring(0, 50)}...`
+      );
+      const overallEndTime = process.hrtime(overallStartTime);
+      const totalTime = (overallEndTime[0] * 1e9 + overallEndTime[1]) / 1e6;
+      logger.info(
+        `[createShortUrl] Finished existing URL in: ${totalTime.toFixed(3)}ms`
+      );
       return existingUrl;
     }
 
-    // Generate a new short ID
+    // 2. Generate a new short ID
+    const shortIdGenerationStartTime = process.hrtime();
     const shortId = await generateShortId();
+    const shortIdGenerationEndTime = process.hrtime(shortIdGenerationStartTime);
+    shortIdGenerationTime =
+      (shortIdGenerationEndTime[0] * 1e9 + shortIdGenerationEndTime[1]) / 1e6;
+    logger.debug(
+      `[createShortUrl] shortId generation (Redis incr + base62) took: ${shortIdGenerationTime.toFixed(
+        3
+      )}ms`
+    );
 
-    // Create new URL document
+    // 3. Create new URL document
     const newUrl = new Url({
       originalUrl,
       shortId,
       createdBy,
     });
 
+    // 4. Save to Database
+    const dbSaveStartTime = process.hrtime();
     await newUrl.save();
+    const dbSaveEndTime = process.hrtime(dbSaveStartTime);
+    dbSaveTime = (dbSaveEndTime[0] * 1e9 + dbSaveEndTime[1]) / 1e6;
+    logger.debug(`[createShortUrl] DB save took: ${dbSaveTime.toFixed(3)}ms`);
 
-    // Cache the mapping in Redis if available
+    // 5. Cache the mapping in Redis
     if (redisClient) {
+      const cacheSetStartTime = process.hrtime();
       await redisClient.set(`url:${shortId}`, originalUrl, {
         EX: 60 * 60 * 24, // 24 hours expiration
       });
+      const cacheSetEndTime = process.hrtime(cacheSetStartTime);
+      cacheSetTime = (cacheSetEndTime[0] * 1e9 + cacheSetEndTime[1]) / 1e6;
+      logger.debug(
+        `[createShortUrl] Redis cache set took: ${cacheSetTime.toFixed(3)}ms`
+      );
     }
+
+    const overallEndTime = process.hrtime(overallStartTime);
+    const totalTime = (overallEndTime[0] * 1e9 + overallEndTime[1]) / 1e6;
+    logger.info(
+      `[createShortUrl] Successfully created ${shortId} for ${originalUrl.substring(
+        0,
+        50
+      )}... ` +
+        `Total: ${totalTime.toFixed(3)}ms ` +
+        `(DBCheck: ${dbCheckTime.toFixed(
+          3
+        )}ms, GenID: ${shortIdGenerationTime.toFixed(
+          3
+        )}ms, DBSave: ${dbSaveTime.toFixed(3)}ms, CacheSet: ${
+          cacheSetTime ? cacheSetTime.toFixed(3) : 'N/A'
+        }ms)`
+    );
 
     return newUrl;
   } catch (error) {
-    logger.error(`Error creating short URL: ${error.message}`);
+    const overallEndTime = process.hrtime(overallStartTime);
+    const totalTime = (overallEndTime[0] * 1e9 + overallEndTime[1]) / 1e6;
+    logger.error(
+      `[createShortUrl] Error after ${totalTime.toFixed(
+        3
+      )}ms for ${originalUrl.substring(0, 50)}...: ${error.message}`
+    );
+    // To ensure all timings are captured in case of an error partway through:
+    logger.error(
+      `[createShortUrl] Timings before error: ` +
+        `DBCheck: ${dbCheckTime ? dbCheckTime.toFixed(3) : 'N/A'}ms, ` +
+        `GenID: ${
+          shortIdGenerationTime ? shortIdGenerationTime.toFixed(3) : 'N/A'
+        }ms, ` +
+        `DBSave: ${dbSaveTime ? dbSaveTime.toFixed(3) : 'N/A'}ms, ` +
+        `CacheSet: ${cacheSetTime ? cacheSetTime.toFixed(3) : 'N/A'}ms`
+    );
     throw error;
   }
 };

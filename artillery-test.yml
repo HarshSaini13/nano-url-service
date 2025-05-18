@@ -1,0 +1,34 @@
+config:
+  # Target URL for your API
+  target: 'https://nano-url-service.onrender.com'
+  # Path to the processor file
+  processor: './artillery-processor.js'
+  phases:
+    # Phase 1: Warm-up (optional, but good practice)
+    - duration: 30 # seconds
+      arrivalRate: 10 # Start with 10 new virtual users per second
+      rampTo: 30 # Gradually ramp up to 30 new virtual users per second
+      name: 'Warm-up phase'
+    # Phase 2: Sustained load to try and achieve 72 QPS
+    - duration: 60 # seconds
+      arrivalRate: 72 # Target 72 new virtual users (and thus requests) per second
+      name: 'Load test at 72 QPS'
+  # Define HTTP specific options
+  http:
+    # Timeout for HTTP requests in seconds
+    timeout: 10
+
+scenarios:
+  - name: 'Create a new Short URL'
+    flow:
+      # 1. Call the function in our processor to generate data for the request
+      - function: 'generateUniqueUrlData'
+      # 2. Make a POST request to the /api/url endpoint
+      - post:
+          url: '/api/url'
+          json:
+            originalUrl: '{{ uniqueUrl }}' # Use the variable set by our function
+          # Optional: Capture data from the response if needed for subsequent requests
+          # capture:
+          #   - json: "$.data.shortId"
+          #     as: "shortId"

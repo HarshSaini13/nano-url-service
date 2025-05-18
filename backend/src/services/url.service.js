@@ -36,6 +36,7 @@ const generateShortId = async () => {
  * @returns {Object} - The created URL object
  */
 const createShortUrl = async (originalUrl, createdBy = 'anonymous') => {
+  logger.error('!!!!!!!!!! CREATE SHORT URL CALLED ON RENDER !!!!!!!!!!'); // Added for testing
   const overallStartTime = process.hrtime();
   let shortIdGenerationTime, dbCheckTime, dbSaveTime, cacheSetTime;
 
